@@ -66,7 +66,7 @@ fun GasTrackApp(repository: FuelRepository, locationHelper: LocationHelper) {
             modifier = Modifier.fillMaxSize(),
             bottomBar = {
                 NavigationBar {
-                    listOf("Add", "History", "Stats").forEachIndexed { index, title ->
+                    listOf("Add", "Stats", "History").forEachIndexed { index, title ->
                         NavigationBarItem(
                             selected = pagerState.currentPage == index,
                             onClick = { scope.launch { pagerState.animateScrollToPage(index) } },
@@ -89,13 +89,13 @@ fun GasTrackApp(repository: FuelRepository, locationHelper: LocationHelper) {
                         locationHelper = locationHelper,
                         modifier = Modifier.fillMaxSize()
                     )
-                    1 -> HistoryScreen(
+                    1 -> StatsScreen(
                         repository = repository,
-                        onEntryClick = { entry -> detailEntryId = entry.id },
                         modifier = Modifier.fillMaxSize()
                     )
-                    else -> StatsScreen(
+                    else -> HistoryScreen(
                         repository = repository,
+                        onEntryClick = { entry -> detailEntryId = entry.id },
                         modifier = Modifier.fillMaxSize()
                     )
                 }

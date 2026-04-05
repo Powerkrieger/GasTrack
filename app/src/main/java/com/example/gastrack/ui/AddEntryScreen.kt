@@ -47,6 +47,7 @@ import androidx.core.content.FileProvider
 import com.example.gastrack.data.FuelEntry
 import com.example.gastrack.data.FuelRepository
 import com.example.gastrack.location.LocationHelper
+import com.example.gastrack.network.OverpassService
 import com.example.gastrack.storage.ImageStorage
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.Dispatchers
@@ -124,33 +125,42 @@ fun AddEntryScreen(
         }
     }
 
+    // Phase 1: get coordinates (30 s timeout) → update UI immediately.
+    // Phase 2: look up the nearby station without the spinner so the Save button isn't blocked.
+    suspend fun fetchLocation() {
+        val location = withTimeoutOrNull(30_000) { locationHelper.getCurrentLocation() }
+        if (location == null) {
+            statusMessage = "Could not get location."
+            isFetchingLocation = false
+            return
+        }
+        latitude = location.latitude
+        longitude = location.longitude
+        city = locationHelper.getCity(location.latitude, location.longitude)
+        statusMessage = if (city.isNotEmpty()) "Location: $city" else "Location obtained."
+        isFetchingLocation = false  // stop spinner; save button is now available
+
+        val nearby = withContext(Dispatchers.IO) {
+            OverpassService.findNearestStation(location.latitude, location.longitude)
+        }
+        if (stationName.isBlank()) {
+            if (nearby != null) {
+                stationName = nearby.name
+            } else {
+                stationNameAlert = true
+                delay(1_500)
+                stationNameAlert = false
+            }
+        }
+    }
+
     val locationPermissionLauncher = rememberLauncherForActivityResult(
         ActivityResultContracts.RequestPermission()
     ) { granted ->
         if (granted) {
             isFetchingLocation = true
             statusMessage = "Getting location..."
-            scope.launch {
-                val data = withTimeoutOrNull(20_000) { locationHelper.getLocationData() }
-                if (data != null) {
-                    latitude = data.lat
-                    longitude = data.lon
-                    city = data.city
-                    if (stationName.isBlank()) {
-                        if (data.nearbyStation != null) {
-                            stationName = data.nearbyStation.name
-                        } else {
-                            stationNameAlert = true
-                            delay(1_500)
-                            stationNameAlert = false
-                        }
-                    }
-                    statusMessage = if (city.isNotEmpty()) "Location: $city" else "Location obtained."
-                } else {
-                    statusMessage = "Could not get location."
-                }
-                isFetchingLocation = false
-            }
+            scope.launch { fetchLocation() }
         } else {
             statusMessage = "Location permission denied."
         }
@@ -163,27 +173,7 @@ fun AddEntryScreen(
         if (hasPermission) {
             isFetchingLocation = true
             statusMessage = "Getting location..."
-            scope.launch {
-                val data = withTimeoutOrNull(20_000) { locationHelper.getLocationData() }
-                if (data != null) {
-                    latitude = data.lat
-                    longitude = data.lon
-                    city = data.city
-                    if (stationName.isBlank()) {
-                        if (data.nearbyStation != null) {
-                            stationName = data.nearbyStation.name
-                        } else {
-                            stationNameAlert = true
-                            delay(1_500)
-                            stationNameAlert = false
-                        }
-                    }
-                    statusMessage = if (city.isNotEmpty()) "Location: $city" else "Location obtained."
-                } else {
-                    statusMessage = "Could not get location."
-                }
-                isFetchingLocation = false
-            }
+            scope.launch { fetchLocation() }
         } else {
             locationPermissionLauncher.launch(Manifest.permission.ACCESS_FINE_LOCATION)
         }

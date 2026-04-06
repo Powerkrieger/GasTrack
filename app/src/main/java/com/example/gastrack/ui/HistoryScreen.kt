@@ -1,7 +1,10 @@
 package com.example.gastrack.ui
 
+import androidx.activity.compose.rememberLauncherForActivityResult
+import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxSize
@@ -10,6 +13,7 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.material3.Card
+import androidx.compose.material3.FilledTonalButton
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
@@ -18,14 +22,17 @@ import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import com.example.gastrack.data.FuelEntry
 import com.example.gastrack.data.FuelRepository
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import java.text.SimpleDateFormat
 import java.util.Date
@@ -37,34 +44,100 @@ fun HistoryScreen(
     onEntryClick: (FuelEntry) -> Unit,
     modifier: Modifier = Modifier,
 ) {
+    val context = LocalContext.current
+    val scope = rememberCoroutineScope()
     var entries by remember { mutableStateOf(listOf<FuelEntry>()) }
+    var statusMessage by remember { mutableStateOf("") }
+    var refreshKey by remember { mutableStateOf(0) }
 
-    LaunchedEffect(Unit) {
+    LaunchedEffect(refreshKey) {
         entries = withContext(Dispatchers.IO) { repository.getAllEntries() }
     }
 
-    if (entries.isEmpty()) {
-        Column(
-            modifier = modifier.fillMaxSize(),
-            verticalArrangement = Arrangement.Center,
-            horizontalAlignment = Alignment.CenterHorizontally
-        ) {
-            Text("No entries yet.", style = MaterialTheme.typography.bodyLarge)
+    val exportLauncher = rememberLauncherForActivityResult(
+        ActivityResultContracts.CreateDocument("application/zip")
+    ) { uri ->
+        if (uri != null) {
+            scope.launch {
+                try {
+                    val count = entries.size
+                    withContext(Dispatchers.IO) { repository.exportToZip(uri) }
+                    statusMessage = "Exported $count entries."
+                } catch (e: Exception) {
+                    statusMessage = "Export failed."
+                }
+            }
         }
-        return
     }
 
-    LazyColumn(
-        modifier = modifier
-            .fillMaxSize()
-            .padding(horizontal = 16.dp),
-        verticalArrangement = Arrangement.spacedBy(8.dp)
-    ) {
-        item { }
-        items(entries, key = { it.id }) { entry ->
-            EntryRow(entry = entry, onClick = { onEntryClick(entry) })
+    val importLauncher = rememberLauncherForActivityResult(
+        ActivityResultContracts.OpenDocument()
+    ) { uri ->
+        if (uri != null) {
+            scope.launch {
+                try {
+                    val count = withContext(Dispatchers.IO) { repository.importFromZip(uri) }
+                    refreshKey++
+                    statusMessage = "Imported $count new entries."
+                } catch (e: Exception) {
+                    statusMessage = "Import failed."
+                }
+            }
         }
-        item { }
+    }
+
+    Column(modifier = modifier.fillMaxSize()) {
+        Row(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(horizontal = 16.dp, vertical = 8.dp),
+            horizontalArrangement = Arrangement.spacedBy(8.dp)
+        ) {
+            FilledTonalButton(
+                onClick = {
+                    val date = SimpleDateFormat("yyyy-MM-dd", Locale.US).format(Date())
+                    exportLauncher.launch("gastrack-$date.zip")
+                },
+                modifier = Modifier.weight(1f),
+                enabled = entries.isNotEmpty()
+            ) { Text("Export") }
+            FilledTonalButton(
+                onClick = { importLauncher.launch(arrayOf("application/zip")) },
+                modifier = Modifier.weight(1f)
+            ) { Text("Import") }
+        }
+
+        if (statusMessage.isNotEmpty()) {
+            Text(
+                statusMessage,
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                modifier = Modifier.padding(horizontal = 16.dp, vertical = 2.dp)
+            )
+        }
+
+        if (entries.isEmpty()) {
+            Box(
+                modifier = Modifier.fillMaxSize(),
+                contentAlignment = Alignment.Center
+            ) {
+                Text("No entries yet.", style = MaterialTheme.typography.bodyLarge)
+            }
+        } else {
+            LazyColumn(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .weight(1f)
+                    .padding(horizontal = 16.dp),
+                verticalArrangement = Arrangement.spacedBy(8.dp)
+            ) {
+                item { }
+                items(entries, key = { it.id }) { entry ->
+                    EntryRow(entry = entry, onClick = { onEntryClick(entry) })
+                }
+                item { }
+            }
+        }
     }
 }
 

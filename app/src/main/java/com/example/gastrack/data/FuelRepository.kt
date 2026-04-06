@@ -2,9 +2,16 @@ package com.example.gastrack.data
 
 import android.content.ContentValues
 import android.content.Context
+import android.net.Uri
+import org.json.JSONArray
+import org.json.JSONObject
+import java.io.File
 import java.util.UUID
+import java.util.zip.ZipEntry
+import java.util.zip.ZipInputStream
+import java.util.zip.ZipOutputStream
 
-class FuelRepository(context: Context) {
+class FuelRepository(private val context: Context) {
 
     private val db = GasTrackDatabase(context)
 
@@ -75,6 +82,107 @@ class FuelRepository(context: Context) {
             if (it.moveToFirst()) return cursorToEntry(it)
         }
         return null
+    }
+
+    fun exportToZip(uri: Uri) {
+        val entries = getAllEntries()
+        val jsonArray = JSONArray()
+        for (entry in entries) {
+            jsonArray.put(JSONObject().apply {
+                put("id", entry.id)
+                put("timestamp", entry.timestamp)
+                put("latitude", entry.latitude)
+                put("longitude", entry.longitude)
+                put("city", entry.city)
+                put("stationName", entry.stationName)
+                put("liters", entry.liters)
+                put("euros", entry.euros)
+                put("pricePerLiter", entry.pricePerLiter)
+                put("kilometers", entry.kilometers)
+                if (entry.receiptPath != null) put("receiptFile", File(entry.receiptPath).name)
+            })
+        }
+        context.contentResolver.openOutputStream(uri)?.use { out ->
+            ZipOutputStream(out).use { zip ->
+                zip.putNextEntry(ZipEntry("entries.json"))
+                zip.write(jsonArray.toString(2).toByteArray())
+                zip.closeEntry()
+                for (entry in entries) {
+                    if (entry.receiptPath != null) {
+                        val file = File(entry.receiptPath)
+                        if (file.exists()) {
+                            zip.putNextEntry(ZipEntry("receipts/${file.name}"))
+                            file.inputStream().use { it.copyTo(zip) }
+                            zip.closeEntry()
+                        }
+                    }
+                }
+            }
+        }
+    }
+
+    fun importFromZip(uri: Uri): Int {
+        val receiptsDir = File(context.filesDir, "receipts").also { it.mkdirs() }
+        var entriesJson: String? = null
+        val receiptData = mutableMapOf<String, ByteArray>()
+
+        context.contentResolver.openInputStream(uri)?.use { input ->
+            ZipInputStream(input).use { zip ->
+                var entry = zip.nextEntry
+                while (entry != null) {
+                    when {
+                        entry.name == "entries.json" ->
+                            entriesJson = zip.readBytes().toString(Charsets.UTF_8)
+                        entry.name.startsWith("receipts/") -> {
+                            val name = entry.name.removePrefix("receipts/")
+                            if (name.isNotEmpty()) receiptData[name] = zip.readBytes()
+                        }
+                    }
+                    zip.closeEntry()
+                    entry = zip.nextEntry
+                }
+            }
+        }
+
+        for ((name, bytes) in receiptData) {
+            File(receiptsDir, name).writeBytes(bytes)
+        }
+
+        var imported = 0
+        entriesJson?.let { json ->
+            val array = JSONArray(json)
+            for (i in 0 until array.length()) {
+                val obj = array.getJSONObject(i)
+                val id = obj.getString("id")
+                if (!entryExists(id)) {
+                    val receiptPath = if (obj.has("receiptFile"))
+                        File(receiptsDir, obj.getString("receiptFile")).absolutePath
+                    else null
+                    insertEntry(FuelEntry(
+                        id = id,
+                        timestamp = obj.getLong("timestamp"),
+                        latitude = obj.getDouble("latitude"),
+                        longitude = obj.getDouble("longitude"),
+                        city = obj.getString("city"),
+                        stationName = obj.getString("stationName"),
+                        liters = obj.getDouble("liters"),
+                        euros = obj.getDouble("euros"),
+                        pricePerLiter = obj.getDouble("pricePerLiter"),
+                        kilometers = obj.getDouble("kilometers"),
+                        receiptPath = receiptPath
+                    ))
+                    imported++
+                }
+            }
+        }
+        return imported
+    }
+
+    private fun entryExists(id: String): Boolean {
+        val cursor = db.readableDatabase.query(
+            "fuel_entries", arrayOf("id"), "id=?", arrayOf(id), null, null, null
+        )
+        cursor.use { return it.moveToFirst() }
     }
 
     private fun cursorToEntry(it: android.database.Cursor) = FuelEntry(

@@ -393,10 +393,13 @@ fun AddEntryScreen(
             Text(parts, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.secondary)
         }
 
-        if (city.isNotEmpty()) {
+        if (latitude != null) {
             Text(
-                "Location: $city (${latitude?.let { "%.4f".format(it) }}, ${longitude?.let { "%.4f".format(it) }})",
-                style = MaterialTheme.typography.bodySmall,
+                buildString {
+                    if (city.isNotEmpty()) append("$city  ·  ")
+                    append("${"%.5f".format(latitude)}, ${"%.5f".format(longitude)}")
+                },
+                style = MaterialTheme.typography.bodyMedium,
                 color = MaterialTheme.colorScheme.secondary
             )
         }

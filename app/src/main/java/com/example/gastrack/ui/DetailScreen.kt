@@ -1,5 +1,6 @@
 package com.example.gastrack.ui
 
+import android.content.Intent
 import android.graphics.BitmapFactory
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.layout.Arrangement
@@ -12,6 +13,7 @@ import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
+import androidx.compose.material3.FilledTonalButton
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
@@ -22,15 +24,19 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
+import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.asImageBitmap
 import androidx.compose.ui.layout.ContentScale
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
+import androidx.core.content.FileProvider
 import com.example.gastrack.data.FuelEntry
 import com.example.gastrack.data.FuelRepository
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
+import java.io.File
 import java.text.SimpleDateFormat
 import java.util.Date
 import java.util.Locale
@@ -42,6 +48,7 @@ fun DetailScreen(
     onBack: () -> Unit,
     modifier: Modifier = Modifier,
 ) {
+    val context = LocalContext.current
     var entry by remember { mutableStateOf<FuelEntry?>(null) }
 
     LaunchedEffect(entryId) {
@@ -92,11 +99,28 @@ fun DetailScreen(
 
         e.receiptPath?.let { path ->
             Spacer(modifier = Modifier.height(16.dp))
-            Text("Receipt", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.SemiBold)
-            Spacer(modifier = Modifier.height(8.dp))
-            val bitmap = remember(path) {
-                BitmapFactory.decodeFile(path)
+            val bitmap = remember(path) { BitmapFactory.decodeFile(path) }
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.SpaceBetween,
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                Text("Receipt", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.SemiBold)
+                if (bitmap != null) {
+                    FilledTonalButton(onClick = {
+                        val uri = FileProvider.getUriForFile(
+                            context, "${context.packageName}.fileprovider", File(path)
+                        )
+                        val intent = Intent(Intent.ACTION_SEND).apply {
+                            type = "image/jpeg"
+                            putExtra(Intent.EXTRA_STREAM, uri)
+                            addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
+                        }
+                        context.startActivity(Intent.createChooser(intent, null))
+                    }) { Text("Share") }
+                }
             }
+            Spacer(modifier = Modifier.height(8.dp))
             if (bitmap != null) {
                 Image(
                     bitmap = bitmap.asImageBitmap(),

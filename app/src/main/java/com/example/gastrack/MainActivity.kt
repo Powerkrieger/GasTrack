@@ -21,9 +21,11 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import com.example.gastrack.data.FuelRepository
 import com.example.gastrack.location.LocationHelper
+import com.example.gastrack.network.SyncService
 import com.example.gastrack.ui.AddEntryScreen
 import com.example.gastrack.ui.DetailScreen
 import com.example.gastrack.ui.HistoryScreen
+import com.example.gastrack.ui.SettingsScreen
 import com.example.gastrack.ui.StatsScreen
 import com.example.gastrack.ui.theme.GasTrackTheme
 import kotlinx.coroutines.launch
@@ -32,28 +34,46 @@ class MainActivity : ComponentActivity() {
 
     private lateinit var repository: FuelRepository
     private lateinit var locationHelper: LocationHelper
+    private lateinit var syncService: SyncService
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         repository = FuelRepository(applicationContext)
         locationHelper = LocationHelper(applicationContext)
+        syncService = SyncService(applicationContext, repository)
         enableEdgeToEdge()
         setContent {
             GasTrackTheme {
-                GasTrackApp(repository = repository, locationHelper = locationHelper)
+                GasTrackApp(
+                    repository = repository,
+                    locationHelper = locationHelper,
+                    syncService = syncService
+                )
             }
         }
     }
 }
 
 @Composable
-fun GasTrackApp(repository: FuelRepository, locationHelper: LocationHelper) {
+fun GasTrackApp(
+    repository: FuelRepository,
+    locationHelper: LocationHelper,
+    syncService: SyncService,
+) {
     val scope = rememberCoroutineScope()
     val pagerState = rememberPagerState(pageCount = { 3 })
     var detailEntryId by remember { mutableStateOf<String?>(null) }
+    var showSettings by remember { mutableStateOf(false) }
 
-    if (detailEntryId != null) {
-        Scaffold(modifier = Modifier.fillMaxSize()) { padding ->
+    when {
+        showSettings -> Scaffold(modifier = Modifier.fillMaxSize()) { padding ->
+            SettingsScreen(
+                syncService = syncService,
+                onBack = { showSettings = false },
+                modifier = Modifier.padding(padding)
+            )
+        }
+        detailEntryId != null -> Scaffold(modifier = Modifier.fillMaxSize()) { padding ->
             DetailScreen(
                 entryId = detailEntryId!!,
                 repository = repository,
@@ -61,8 +81,7 @@ fun GasTrackApp(repository: FuelRepository, locationHelper: LocationHelper) {
                 modifier = Modifier.padding(padding)
             )
         }
-    } else {
-        Scaffold(
+        else -> Scaffold(
             modifier = Modifier.fillMaxSize(),
             bottomBar = {
                 NavigationBar {
@@ -87,6 +106,7 @@ fun GasTrackApp(repository: FuelRepository, locationHelper: LocationHelper) {
                     0 -> AddEntryScreen(
                         repository = repository,
                         locationHelper = locationHelper,
+                        syncService = syncService,
                         modifier = Modifier.fillMaxSize()
                     )
                     1 -> StatsScreen(
@@ -96,6 +116,7 @@ fun GasTrackApp(repository: FuelRepository, locationHelper: LocationHelper) {
                     else -> HistoryScreen(
                         repository = repository,
                         onEntryClick = { entry -> detailEntryId = entry.id },
+                        onSettingsClick = { showSettings = true },
                         modifier = Modifier.fillMaxSize()
                     )
                 }

@@ -11,5 +11,6 @@ data class FuelEntry(
     val euros: Double,
     val pricePerLiter: Double,
     val kilometers: Double,
-    val receiptPath: String?
+    val receiptPath: String?,
+    val synced: Boolean = false
 )

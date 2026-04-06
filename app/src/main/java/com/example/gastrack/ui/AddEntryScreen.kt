@@ -49,6 +49,8 @@ import com.example.gastrack.data.FuelRepository
 import com.example.gastrack.location.LocationHelper
 import com.example.gastrack.location.LocationResult
 import com.example.gastrack.network.OverpassService
+import com.example.gastrack.network.SyncResult
+import com.example.gastrack.network.SyncService
 import com.example.gastrack.storage.ImageStorage
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.Dispatchers
@@ -65,6 +67,7 @@ import java.util.UUID
 fun AddEntryScreen(
     repository: FuelRepository,
     locationHelper: LocationHelper,
+    syncService: SyncService,
     modifier: Modifier = Modifier,
 ) {
     val context = LocalContext.current
@@ -275,6 +278,14 @@ fun AddEntryScreen(
             statusMessage = "Entry saved!"
             refreshKey++
             isSaving = false
+
+            // Background sync — update message on success/failure
+            val syncResult = syncService.sync()
+            if (syncResult is SyncResult.Success && (syncResult.pushed > 0 || syncResult.pulled > 0)) {
+                statusMessage = "Saved & synced (↑${syncResult.pushed} ↓${syncResult.pulled})"
+            } else if (syncResult is SyncResult.Error) {
+                statusMessage = "Saved (sync failed: ${syncResult.message})"
+            }
         }
     }
 

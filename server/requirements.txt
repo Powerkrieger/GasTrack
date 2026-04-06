@@ -1,0 +1,8 @@
+fastapi
+uvicorn[standard]
+authlib
+httpx
+qrcode[pil]
+pillow
+python-multipart
+itsdangerous

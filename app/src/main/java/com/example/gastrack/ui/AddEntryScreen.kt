@@ -47,6 +47,7 @@ import androidx.core.content.FileProvider
 import com.example.gastrack.data.FuelEntry
 import com.example.gastrack.data.FuelRepository
 import com.example.gastrack.location.LocationHelper
+import com.example.gastrack.location.LocationResult
 import com.example.gastrack.network.OverpassService
 import com.example.gastrack.storage.ImageStorage
 import kotlinx.coroutines.delay
@@ -128,16 +129,24 @@ fun AddEntryScreen(
     // Phase 1: get coordinates (30 s timeout) → update UI immediately.
     // Phase 2: look up the nearby station without the spinner so the Save button isn't blocked.
     suspend fun fetchLocation() {
-        val location = withTimeoutOrNull(30_000) { locationHelper.getCurrentLocation() }
-        if (location == null) {
-            statusMessage = "Could not get location."
-            isFetchingLocation = false
-            return
+        val result = withTimeoutOrNull(30_000) { locationHelper.getCurrentLocation() }
+        val location = when (result) {
+            null -> {
+                statusMessage = "Location timed out — GPS signal may be weak. Try again outdoors."
+                isFetchingLocation = false
+                return
+            }
+            is LocationResult.ProvidersDisabled -> {
+                statusMessage = "Location services are disabled. Enable GPS or Wi-Fi location in Settings."
+                isFetchingLocation = false
+                return
+            }
+            is LocationResult.Success -> result.location
         }
         latitude = location.latitude
         longitude = location.longitude
         city = locationHelper.getCity(location.latitude, location.longitude)
-        statusMessage = if (city.isNotEmpty()) "Location: $city" else "Location obtained."
+        statusMessage = if (city.isNotEmpty()) "Location: $city" else "Location obtained (city lookup failed)."
         isFetchingLocation = false  // stop spinner; save button is now available
 
         val nearby = withContext(Dispatchers.IO) {

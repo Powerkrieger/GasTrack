@@ -27,7 +27,7 @@ oauth.register(
     ),
     client_id=os.environ["KEYCLOAK_CLIENT_ID"],
     client_secret=os.environ["KEYCLOAK_CLIENT_SECRET"],
-    client_kwargs={"scope": "openid email profile"},
+    client_kwargs={"scope": "openid email profile", "code_challenge_method": "S256"},
 )
 
 DATA_DIR = Path("data")

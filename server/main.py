@@ -6,6 +6,7 @@ import secrets
 import sqlite3
 import uuid
 from pathlib import Path
+from urllib.parse import urlencode
 
 import qrcode
 from authlib.integrations.starlette_client import OAuth
@@ -180,7 +181,24 @@ async def pair_callback(request: Request):
     token = await oauth.keycloak.authorize_access_token(request)
     userinfo = token.get("userinfo") or await oauth.keycloak.userinfo(token=token)
     request.session["user"] = dict(userinfo)
+    request.session["id_token"] = token.get("id_token", "")
     return RedirectResponse(url="/pair")
+
+
+@app.get("/pair/logout")
+async def pair_logout(request: Request):
+    id_token = request.session.get("id_token", "")
+    request.session.clear()
+    params = urlencode({
+        "post_logout_redirect_uri": f"{BASE_URL}/pair",
+        "id_token_hint": id_token,
+        "client_id": os.environ["KEYCLOAK_CLIENT_ID"],
+    })
+    keycloak_logout = (
+        f"{os.environ['KEYCLOAK_URL']}/realms/{os.environ['KEYCLOAK_REALM']}"
+        f"/protocol/openid-connect/logout?{params}"
+    )
+    return RedirectResponse(url=keycloak_logout)
 
 
 @app.get("/pair", response_class=HTMLResponse)
@@ -223,7 +241,7 @@ async def pair_page(request: Request):
 </head>
 <body>
   <h1>GasTrack — Add Device</h1>
-  <p>Logged in as <strong>{user.get("email") or user.get("sub")}</strong></p>
+  <p>Logged in as <strong>{user.get("email") or user.get("sub")}</strong> — <a href="/pair/logout">Logout</a></p>
   <form method="post" action="/pair">
     <label>Device name: <input type="text" name="device_name" required placeholder="e.g. Pixel 9"></label>
     <button type="submit">Generate QR Code</button>

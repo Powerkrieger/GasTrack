@@ -93,8 +93,8 @@ async def require_device(x_api_key: str = Header(...)):
 # ---------------------------------------------------------------------------
 
 @app.get("/")
-def health():
-    return {"status": "ok"}
+def index():
+    return RedirectResponse(url="/pair")
 
 
 # ---------------------------------------------------------------------------

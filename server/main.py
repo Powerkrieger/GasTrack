@@ -13,6 +13,8 @@ from fastapi import Depends, FastAPI, Header, HTTPException, Request
 from fastapi.responses import HTMLResponse, RedirectResponse
 from starlette.middleware.sessions import SessionMiddleware
 
+BASE_URL = os.environ["BASE_URL"].rstrip("/")
+
 app = FastAPI(title="GasTrack Sync Server")
 app.add_middleware(SessionMiddleware, secret_key=os.environ["SECRET_KEY"])
 
@@ -167,13 +169,9 @@ def _make_qr_b64(data: str) -> str:
     return base64.b64encode(buf.getvalue()).decode()
 
 
-def _base_url(request: Request) -> str:
-    return str(request.base_url).rstrip("/")
-
-
 @app.get("/pair/login")
 async def pair_login(request: Request):
-    redirect_uri = f"{_base_url(request)}/pair/callback"
+    redirect_uri = f"{BASE_URL}/pair/callback"
     return await oauth.keycloak.authorize_redirect(request, redirect_uri)
 
 
@@ -191,7 +189,7 @@ async def pair_page(request: Request):
         return RedirectResponse(url="/pair/login")
 
     user = request.session["user"]
-    server_url = _base_url(request)
+    server_url = BASE_URL
 
     with get_db() as conn:
         devices = conn.execute(
@@ -254,7 +252,7 @@ async def pair_create(request: Request):
             (device_id, device_name, api_key),
         )
 
-    server_url = _base_url(request)
+    server_url = BASE_URL
     qr_b64 = _make_qr_b64(json.dumps({"url": server_url, "key": api_key}))
 
     return f"""<!DOCTYPE html>

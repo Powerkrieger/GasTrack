@@ -45,12 +45,15 @@ cp .env.example .env
 Edit `.env`:
 
 ```env
+BASE_URL=https://gastrack.example.com        # public URL of this server (no trailing slash)
 KEYCLOAK_URL=https://auth.example.com        # your Keycloak base URL (no trailing slash)
 KEYCLOAK_REALM=master                        # your realm name
 KEYCLOAK_CLIENT_ID=gastrack-server           # client ID from step 1
 KEYCLOAK_CLIENT_SECRET=abc123...             # client secret from step 1
 SECRET_KEY=...                               # run: openssl rand -hex 32
 ```
+
+> **Why `BASE_URL`?** The server runs behind a reverse proxy (Caddy), so it can't reliably detect its own public address from incoming requests. Setting `BASE_URL` explicitly ensures the correct redirect URI is sent to Keycloak.
 
 ### Configure domain
 

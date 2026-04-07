@@ -64,12 +64,15 @@ fun GasTrackApp(
     val pagerState = rememberPagerState(pageCount = { 3 })
     var detailEntryId by remember { mutableStateOf<String?>(null) }
     var showSettings by remember { mutableStateOf(false) }
+    var historyRefreshTrigger by remember { mutableStateOf(0) }
 
     when {
         showSettings -> Scaffold(modifier = Modifier.fillMaxSize()) { padding ->
             SettingsScreen(
                 syncService = syncService,
+                repository = repository,
                 onBack = { showSettings = false },
+                onImportDone = { historyRefreshTrigger++ },
                 modifier = Modifier.padding(padding)
             )
         }
@@ -117,6 +120,7 @@ fun GasTrackApp(
                         repository = repository,
                         onEntryClick = { entry -> detailEntryId = entry.id },
                         onSettingsClick = { showSettings = true },
+                        refreshTrigger = historyRefreshTrigger,
                         modifier = Modifier.fillMaxSize()
                     )
                 }

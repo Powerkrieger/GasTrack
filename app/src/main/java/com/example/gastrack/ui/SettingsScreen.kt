@@ -1,6 +1,7 @@
 package com.example.gastrack.ui
 
 import androidx.activity.compose.rememberLauncherForActivityResult
+import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
@@ -16,12 +17,14 @@ import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material3.Button
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.FilledTonalButton
+import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -32,18 +35,26 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.text.input.PasswordVisualTransformation
 import androidx.compose.ui.unit.dp
+import com.example.gastrack.data.FuelRepository
 import com.example.gastrack.network.SyncResult
 import com.example.gastrack.network.SyncService
 import com.journeyapps.barcodescanner.ScanContract
 import com.journeyapps.barcodescanner.ScanOptions
+import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
 import org.json.JSONException
 import org.json.JSONObject
+import java.text.SimpleDateFormat
+import java.util.Date
+import java.util.Locale
 
 @Composable
 fun SettingsScreen(
     syncService: SyncService,
+    repository: FuelRepository,
     onBack: () -> Unit,
+    onImportDone: () -> Unit = {},
     modifier: Modifier = Modifier,
 ) {
     val scope = rememberCoroutineScope()
@@ -51,6 +62,43 @@ fun SettingsScreen(
     var apiKey by remember { mutableStateOf(syncService.apiKey) }
     var statusMessage by remember { mutableStateOf("") }
     var isSyncing by remember { mutableStateOf(false) }
+    var entryCount by remember { mutableStateOf(0) }
+
+    LaunchedEffect(Unit) {
+        entryCount = withContext(Dispatchers.IO) { repository.getAllEntries().size }
+    }
+
+    val exportLauncher = rememberLauncherForActivityResult(
+        ActivityResultContracts.CreateDocument("application/zip")
+    ) { uri ->
+        if (uri != null) {
+            scope.launch {
+                try {
+                    val count = entryCount
+                    withContext(Dispatchers.IO) { repository.exportToZip(uri) }
+                    statusMessage = "Exported $count entries."
+                } catch (e: Exception) {
+                    statusMessage = "Export failed."
+                }
+            }
+        }
+    }
+
+    val importLauncher = rememberLauncherForActivityResult(
+        ActivityResultContracts.OpenDocument()
+    ) { uri ->
+        if (uri != null) {
+            scope.launch {
+                try {
+                    val count = withContext(Dispatchers.IO) { repository.importFromZip(uri) }
+                    onImportDone()
+                    statusMessage = "Imported $count new entries."
+                } catch (e: Exception) {
+                    statusMessage = "Import failed."
+                }
+            }
+        }
+    }
 
     val scanLauncher = rememberLauncherForActivityResult(ScanContract()) { result ->
         result.contents?.let { json ->
@@ -147,6 +195,28 @@ fun SettingsScreen(
             } else {
                 Text("Sync Now")
             }
+        }
+
+        HorizontalDivider()
+
+        Text("Data", style = MaterialTheme.typography.titleMedium)
+
+        Row(
+            modifier = Modifier.fillMaxWidth(),
+            horizontalArrangement = Arrangement.spacedBy(8.dp)
+        ) {
+            FilledTonalButton(
+                onClick = {
+                    val date = SimpleDateFormat("yyyy-MM-dd", Locale.US).format(Date())
+                    exportLauncher.launch("gastrack-$date.zip")
+                },
+                modifier = Modifier.weight(1f),
+                enabled = entryCount > 0
+            ) { Text("Export") }
+            FilledTonalButton(
+                onClick = { importLauncher.launch(arrayOf("application/zip")) },
+                modifier = Modifier.weight(1f)
+            ) { Text("Import") }
         }
 
         if (statusMessage.isNotEmpty()) {

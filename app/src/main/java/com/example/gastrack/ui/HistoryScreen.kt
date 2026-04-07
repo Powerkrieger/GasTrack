@@ -1,7 +1,5 @@
 package com.example.gastrack.ui
 
-import androidx.activity.compose.rememberLauncherForActivityResult
-import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -15,7 +13,6 @@ import androidx.compose.foundation.lazy.items
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Settings
 import androidx.compose.material3.Card
-import androidx.compose.material3.FilledTonalButton
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
@@ -26,17 +23,14 @@ import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
-import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import com.example.gastrack.data.FuelEntry
 import com.example.gastrack.data.FuelRepository
 import kotlinx.coroutines.Dispatchers
-import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import java.text.SimpleDateFormat
 import java.util.Date
@@ -47,82 +41,25 @@ fun HistoryScreen(
     repository: FuelRepository,
     onEntryClick: (FuelEntry) -> Unit,
     onSettingsClick: () -> Unit,
+    refreshTrigger: Int = 0,
     modifier: Modifier = Modifier,
 ) {
-    val context = LocalContext.current
-    val scope = rememberCoroutineScope()
     var entries by remember { mutableStateOf(listOf<FuelEntry>()) }
-    var statusMessage by remember { mutableStateOf("") }
-    var refreshKey by remember { mutableStateOf(0) }
 
-    LaunchedEffect(refreshKey) {
+    LaunchedEffect(refreshTrigger) {
         entries = withContext(Dispatchers.IO) { repository.getAllEntries() }
-    }
-
-    val exportLauncher = rememberLauncherForActivityResult(
-        ActivityResultContracts.CreateDocument("application/zip")
-    ) { uri ->
-        if (uri != null) {
-            scope.launch {
-                try {
-                    val count = entries.size
-                    withContext(Dispatchers.IO) { repository.exportToZip(uri) }
-                    statusMessage = "Exported $count entries."
-                } catch (e: Exception) {
-                    statusMessage = "Export failed."
-                }
-            }
-        }
-    }
-
-    val importLauncher = rememberLauncherForActivityResult(
-        ActivityResultContracts.OpenDocument()
-    ) { uri ->
-        if (uri != null) {
-            scope.launch {
-                try {
-                    val count = withContext(Dispatchers.IO) { repository.importFromZip(uri) }
-                    refreshKey++
-                    statusMessage = "Imported $count new entries."
-                } catch (e: Exception) {
-                    statusMessage = "Import failed."
-                }
-            }
-        }
     }
 
     Column(modifier = modifier.fillMaxSize()) {
         Row(
             modifier = Modifier
                 .fillMaxWidth()
-                .padding(horizontal = 16.dp, vertical = 8.dp),
-            horizontalArrangement = Arrangement.spacedBy(8.dp),
-            verticalAlignment = Alignment.CenterVertically
+                .padding(end = 4.dp, top = 4.dp),
+            horizontalArrangement = Arrangement.End
         ) {
-            FilledTonalButton(
-                onClick = {
-                    val date = SimpleDateFormat("yyyy-MM-dd", Locale.US).format(Date())
-                    exportLauncher.launch("gastrack-$date.zip")
-                },
-                modifier = Modifier.weight(1f),
-                enabled = entries.isNotEmpty()
-            ) { Text("Export") }
-            FilledTonalButton(
-                onClick = { importLauncher.launch(arrayOf("application/zip")) },
-                modifier = Modifier.weight(1f)
-            ) { Text("Import") }
             IconButton(onClick = onSettingsClick) {
                 Icon(Icons.Default.Settings, contentDescription = "Settings")
             }
-        }
-
-        if (statusMessage.isNotEmpty()) {
-            Text(
-                statusMessage,
-                style = MaterialTheme.typography.bodySmall,
-                color = MaterialTheme.colorScheme.onSurfaceVariant,
-                modifier = Modifier.padding(horizontal = 16.dp, vertical = 2.dp)
-            )
         }
 
         if (entries.isEmpty()) {

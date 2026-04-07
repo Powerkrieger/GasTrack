@@ -4,7 +4,7 @@ import android.content.Context
 import android.database.sqlite.SQLiteDatabase
 import android.database.sqlite.SQLiteOpenHelper
 
-class GasTrackDatabase(context: Context) : SQLiteOpenHelper(context, "gastrack.db", null, 3) {
+class GasTrackDatabase(context: Context) : SQLiteOpenHelper(context, "gastrack.db", null, 4) {
 
     override fun onCreate(db: SQLiteDatabase) {
         db.execSQL(
@@ -34,6 +34,14 @@ class GasTrackDatabase(context: Context) : SQLiteOpenHelper(context, "gastrack.d
             )
             """.trimIndent()
         )
+        db.execSQL(
+            """
+            CREATE TABLE deleted_entries (
+                id TEXT PRIMARY KEY,
+                deleted_at INTEGER NOT NULL
+            )
+            """.trimIndent()
+        )
     }
 
     override fun onUpgrade(db: SQLiteDatabase, oldVersion: Int, newVersion: Int) {
@@ -42,6 +50,16 @@ class GasTrackDatabase(context: Context) : SQLiteOpenHelper(context, "gastrack.d
         }
         if (oldVersion < 3) {
             db.execSQL("ALTER TABLE fuel_entries ADD COLUMN synced INTEGER NOT NULL DEFAULT 0")
+        }
+        if (oldVersion < 4) {
+            db.execSQL(
+                """
+                CREATE TABLE deleted_entries (
+                    id TEXT PRIMARY KEY,
+                    deleted_at INTEGER NOT NULL
+                )
+                """.trimIndent()
+            )
         }
     }
 }

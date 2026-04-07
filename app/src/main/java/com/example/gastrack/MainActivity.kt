@@ -28,6 +28,7 @@ import com.example.gastrack.ui.HistoryScreen
 import com.example.gastrack.ui.SettingsScreen
 import com.example.gastrack.ui.StatsScreen
 import com.example.gastrack.ui.theme.GasTrackTheme
+import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
 
 class MainActivity : ComponentActivity() {
@@ -81,6 +82,12 @@ fun GasTrackApp(
                 entryId = detailEntryId!!,
                 repository = repository,
                 onBack = { detailEntryId = null },
+                onDelete = {
+                    val id = detailEntryId!!
+                    scope.launch(Dispatchers.IO) { repository.deleteEntry(id) }
+                    detailEntryId = null
+                    historyRefreshTrigger++
+                },
                 modifier = Modifier.padding(padding)
             )
         }

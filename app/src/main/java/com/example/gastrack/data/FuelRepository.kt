@@ -109,6 +109,48 @@ class FuelRepository(private val context: Context) {
         return null
     }
 
+    fun deleteEntry(id: String) {
+        val entry = getEntryById(id)
+        entry?.receiptPath?.let { File(it).delete() }
+        db.writableDatabase.delete("fuel_entries", "id=?", arrayOf(id))
+        val values = ContentValues().apply {
+            put("id", id)
+            put("deleted_at", System.currentTimeMillis())
+        }
+        db.writableDatabase.insertWithOnConflict("deleted_entries", null, values, SQLiteDatabase.CONFLICT_IGNORE)
+    }
+
+    fun getDeletedIds(): List<String> {
+        val cursor = db.readableDatabase.rawQuery("SELECT id FROM deleted_entries", null)
+        val ids = mutableListOf<String>()
+        cursor.use { while (it.moveToNext()) ids.add(it.getString(0)) }
+        return ids
+    }
+
+    fun purgeTombstones(ids: List<String>) {
+        if (ids.isEmpty()) return
+        val placeholders = ids.joinToString(",") { "?" }
+        db.writableDatabase.execSQL(
+            "DELETE FROM deleted_entries WHERE id IN ($placeholders)",
+            ids.toTypedArray()
+        )
+    }
+
+    fun applyTombstones(ids: List<String>) {
+        if (ids.isEmpty()) return
+        val wdb = db.writableDatabase
+        for (id in ids) {
+            val entry = getEntryById(id)
+            entry?.receiptPath?.let { File(it).delete() }
+            wdb.delete("fuel_entries", "id=?", arrayOf(id))
+            val values = ContentValues().apply {
+                put("id", id)
+                put("deleted_at", System.currentTimeMillis())
+            }
+            wdb.insertWithOnConflict("deleted_entries", null, values, SQLiteDatabase.CONFLICT_IGNORE)
+        }
+    }
+
     fun getEntryById(id: String): FuelEntry? {
         val cursor = db.readableDatabase.rawQuery(
             "SELECT $selectColumns $joinClause WHERE e.id = ?", arrayOf(id)

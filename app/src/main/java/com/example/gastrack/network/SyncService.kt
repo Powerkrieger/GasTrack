@@ -44,17 +44,26 @@ class SyncService(private val context: Context, private val repository: FuelRepo
             try {
                 val unsynced = repository.getUnsyncedEntries()
                 val allIds = repository.getAllIds()
+                val deletedIds = repository.getDeletedIds()
 
+                // Protocol contract:
+                // Request:  { known_ids, entries, deleted_ids }
+                // Response: { entries, deleted_ids }
+                // Server stores tombstones and returns IDs deleted by other devices
+                // that are still present in this client's known_ids.
+                // Server must never push back entries whose ID is tombstoned.
                 val requestBody = JSONObject().apply {
                     put("known_ids", JSONArray(allIds))
                     put("entries", JSONArray(unsynced.map { it.toJson() }))
+                    put("deleted_ids", JSONArray(deletedIds))
                 }
 
                 val (code, body) = httpPost("$serverUrl/sync", requestBody.toString(), apiKey)
                 if (code != 200) return@withContext SyncResult.Error("Server returned $code")
 
                 val receiptsDir = File(context.filesDir, "receipts").also { it.mkdirs() }
-                val responseEntries = JSONObject(body).getJSONArray("entries")
+                val responseObj = JSONObject(body)
+                val responseEntries = responseObj.getJSONArray("entries")
                 val pulled = mutableListOf<FuelEntry>()
 
                 for (i in 0 until responseEntries.length()) {
@@ -84,6 +93,13 @@ class SyncService(private val context: Context, private val repository: FuelRepo
 
                 for (entry in pulled) repository.upsertEntry(entry)
                 repository.markSynced(unsynced.map { it.id })
+                repository.purgeTombstones(deletedIds)
+
+                val remoteTombstones = responseObj.optJSONArray("deleted_ids")
+                if (remoteTombstones != null) {
+                    val ids = (0 until remoteTombstones.length()).map { remoteTombstones.getString(it) }
+                    repository.applyTombstones(ids)
+                }
 
                 Log.i(TAG, "Sync complete: pushed=${unsynced.size}, pulled=${pulled.size}")
                 SyncResult.Success(pushed = unsynced.size, pulled = pulled.size)

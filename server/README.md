@@ -75,8 +75,8 @@ Caddy will automatically obtain a TLS certificate from Let's Encrypt. Make sure 
 
 Verify the server is running:
 ```sh
-curl https://<domain>/
-# {"status":"ok"}
+curl -I https://<domain>/
+# HTTP/2 307 ... location: /pair
 ```
 
 ---
@@ -127,18 +127,16 @@ Back up the entire `data/` directory to preserve everything.
 All endpoints require the header `X-Api-Key: <device-api-key>`, except the `/pair/*` routes.
 
 ### `GET /`
-Health check.
-```json
-{"status": "ok"}
-```
+Redirects to `/pair`.
 
 ### `POST /sync`
-Bidirectional sync. The app sends entries it hasn't pushed yet and all entry IDs it knows about. The server returns entries the device doesn't have.
+Bidirectional sync. The app sends entries it hasn't pushed yet, all entry IDs it knows about and the IDs it deleted since the last sync. The server deletes those (keeping a tombstone), returns entries the device doesn't have, and returns the IDs of entries the device still knows that were deleted from another device. Entry IDs must match `^[A-Za-z0-9-]{1,64}$` (they become photo file names).
 
 **Request body:**
 ```json
 {
   "known_ids": ["uuid1", "uuid2"],
+  "deleted_ids": ["uuid3"],
   "entries": [
     {
       "id": "550e8400-e29b-41d4-a716-446655440000",
@@ -174,7 +172,8 @@ Bidirectional sync. The app sends entries it hasn't pushed yet and all entry IDs
       "kilometers": 380.0,
       "photo": "<base64-encoded JPEG, if available>"
     }
-  ]
+  ],
+  "deleted_ids": ["uuid2"]
 }
 ```
 

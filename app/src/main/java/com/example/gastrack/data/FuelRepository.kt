@@ -210,7 +210,7 @@ class FuelRepository(private val context: Context) {
                             entriesJson = zip.readBytes().toString(Charsets.UTF_8)
                         entry.name.startsWith("receipts/") -> {
                             val name = entry.name.removePrefix("receipts/")
-                            if (name.isNotEmpty()) receiptData[name] = zip.readBytes()
+                            if (isSafeFileName(name)) receiptData[name] = zip.readBytes()
                         }
                     }
                     zip.closeEntry()
@@ -228,9 +228,9 @@ class FuelRepository(private val context: Context) {
                 val obj = array.getJSONObject(i)
                 val id = obj.getString("id")
                 if (!entryExists(id)) {
-                    val receiptPath = if (obj.has("receiptFile"))
-                        File(receiptsDir, obj.getString("receiptFile")).absolutePath
-                    else null
+                    val receiptPath = obj.optString("receiptFile")
+                        .takeIf { isSafeFileName(it) }
+                        ?.let { File(receiptsDir, it).absolutePath }
                     insertEntry(FuelEntry(
                         id = id,
                         timestamp = obj.getLong("timestamp"),
@@ -250,6 +250,10 @@ class FuelRepository(private val context: Context) {
         }
         return imported
     }
+
+    /** A bare file name from an untrusted ZIP/JSON: no path separators, no "..", not empty. */
+    private fun isSafeFileName(name: String): Boolean =
+        name.isNotEmpty() && !name.contains('/') && !name.contains('\\') && name != "." && name != ".."
 
     private fun entryExists(id: String): Boolean {
         val cursor = db.readableDatabase.query(

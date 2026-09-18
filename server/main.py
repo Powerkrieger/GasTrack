@@ -1,7 +1,9 @@
 import base64
+import html
 import io
 import json
 import os
+import re
 import secrets
 import sqlite3
 import uuid
@@ -35,6 +37,18 @@ DATA_DIR = Path("data")
 PHOTOS_DIR = DATA_DIR / "photos"
 DB_PATH = DATA_DIR / "gastrack.db"
 
+# Entry ids are client-generated and end up in file names (photos/<id>.jpg), so only accept
+# UUID-shaped ids: anything with a slash or ".." must never reach the filesystem.
+ENTRY_ID_RE = re.compile(r"^[A-Za-z0-9-]{1,64}$")
+
+
+def is_valid_entry_id(entry_id) -> bool:
+    return isinstance(entry_id, str) and ENTRY_ID_RE.fullmatch(entry_id) is not None
+
+
+def photo_path(entry_id: str) -> Path:
+    return PHOTOS_DIR / f"{entry_id}.jpg"
+
 
 def get_db() -> sqlite3.Connection:
     conn = sqlite3.connect(DB_PATH)
@@ -67,6 +81,10 @@ def init_db():
                 price_per_liter REAL NOT NULL,
                 kilometers      REAL NOT NULL DEFAULT 0,
                 created_at      INTEGER DEFAULT (strftime('%s','now'))
+            );
+            CREATE TABLE IF NOT EXISTS deleted_entries (
+                id         TEXT PRIMARY KEY,
+                deleted_at INTEGER DEFAULT (strftime('%s','now'))
             );
         """)
 
@@ -109,21 +127,44 @@ ENTRY_COLS = (
 
 @app.post("/sync")
 async def sync(request: Request, device: dict = Depends(require_device)):
+    """Bidirectional sync, mirroring the app's SyncService:
+
+    Request:  { known_ids, entries, deleted_ids }
+    Response: { entries, deleted_ids }
+
+    Deletions are tombstoned so a device that still has the entry learns about the
+    deletion (it gets the id back in deleted_ids) instead of resurrecting it.
+    """
     body = await request.json()
-    known_ids: set = set(body.get("known_ids", []))
+    known_ids: set = {i for i in body.get("known_ids", []) if is_valid_entry_id(i)}
     incoming: list = body.get("entries", [])
+    deleted_ids: set = {i for i in body.get("deleted_ids", []) if is_valid_entry_id(i)}
 
     with get_db() as conn:
-        for entry in incoming:
+        for entry_id in deleted_ids:
+            conn.execute("DELETE FROM fuel_entries WHERE id = ?", (entry_id,))
             conn.execute(
-                f"""
+                "INSERT OR IGNORE INTO deleted_entries (id) VALUES (?)", (entry_id,)
+            )
+            photo_path(entry_id).unlink(missing_ok=True)
+
+        tombstoned = {
+            row["id"] for row in conn.execute("SELECT id FROM deleted_entries").fetchall()
+        }
+
+        for entry in incoming:
+            entry_id = entry.get("id")
+            if not is_valid_entry_id(entry_id) or entry_id in tombstoned:
+                continue
+            conn.execute(
+                """
                 INSERT OR REPLACE INTO fuel_entries
                     (id, device_id, timestamp, latitude, longitude, city,
                      station_name, liters, euros, price_per_liter, kilometers)
                 VALUES (?,?,?,?,?,?,?,?,?,?,?)
                 """,
                 (
-                    entry["id"], device["id"], entry["timestamp"],
+                    entry_id, device["id"], entry["timestamp"],
                     entry["latitude"], entry["longitude"], entry["city"],
                     entry["station_name"], entry["liters"], entry["euros"],
                     entry["price_per_liter"], entry["kilometers"],
@@ -131,9 +172,7 @@ async def sync(request: Request, device: dict = Depends(require_device)):
             )
             if photo_b64 := entry.get("photo"):
                 try:
-                    (PHOTOS_DIR / f"{entry['id']}.jpg").write_bytes(
-                        base64.b64decode(photo_b64)
-                    )
+                    photo_path(entry_id).write_bytes(base64.b64decode(photo_b64))
                 except Exception:
                     pass
 
@@ -151,12 +190,13 @@ async def sync(request: Request, device: dict = Depends(require_device)):
     result = []
     for row in rows:
         entry = dict(row)
-        photo_path = PHOTOS_DIR / f"{row['id']}.jpg"
-        if photo_path.exists():
-            entry["photo"] = base64.b64encode(photo_path.read_bytes()).decode()
+        path = photo_path(row["id"])
+        if path.exists():
+            entry["photo"] = base64.b64encode(path.read_bytes()).decode()
         result.append(entry)
 
-    return {"entries": result}
+    # Only report tombstones for entries this device still holds.
+    return {"entries": result, "deleted_ids": sorted(tombstoned & known_ids)}
 
 
 # ---------------------------------------------------------------------------
@@ -219,7 +259,7 @@ async def pair_page(request: Request):
         qr_b64 = _make_qr_b64(json.dumps({"url": server_url, "key": d["api_key"]}))
         devices_html += f"""
         <div class="device">
-            <h3>{d['name']}</h3>
+            <h3>{html.escape(d['name'])}</h3>
             <img src="data:image/png;base64,{qr_b64}" width="200" alt="QR code">
             <p><small>Key: <code>{d['api_key'][:8]}…</code></small></p>
         </div>
@@ -241,7 +281,7 @@ async def pair_page(request: Request):
 </head>
 <body>
   <h1>GasTrack — Add Device</h1>
-  <p>Logged in as <strong>{user.get("email") or user.get("sub")}</strong> — <a href="/pair/logout">Logout</a></p>
+  <p>Logged in as <strong>{html.escape(str(user.get("email") or user.get("sub")))}</strong> — <a href="/pair/logout">Logout</a></p>
   <form method="post" action="/pair">
     <label>Device name: <input type="text" name="device_name" required placeholder="e.g. Pixel 9"></label>
     <button type="submit">Generate QR Code</button>
@@ -285,7 +325,7 @@ async def pair_create(request: Request):
 </head>
 <body>
   <h1>Scan this QR code in GasTrack</h1>
-  <p>Device: <strong>{device_name}</strong></p>
+  <p>Device: <strong>{html.escape(device_name)}</strong></p>
   <img src="data:image/png;base64,{qr_b64}" width="300" alt="Pairing QR code">
   <p><a href="/pair">← Back to devices</a></p>
 </body>

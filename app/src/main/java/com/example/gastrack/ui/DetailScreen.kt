@@ -1,7 +1,6 @@
 package com.example.gastrack.ui
 
 import android.content.Intent
-import android.graphics.BitmapFactory
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
@@ -128,7 +127,7 @@ fun DetailScreen(
 
         e.receiptPath?.let { path ->
             Spacer(modifier = Modifier.height(16.dp))
-            val bitmap = remember(path) { BitmapFactory.decodeFile(path) }
+            val bitmap = rememberScaledBitmap(path, maxDim = 1280)
             Row(
                 modifier = Modifier.fillMaxWidth(),
                 horizontalArrangement = Arrangement.SpaceBetween,
@@ -159,7 +158,7 @@ fun DetailScreen(
                         .height(320.dp),
                     contentScale = ContentScale.Fit
                 )
-            } else {
+            } else if (!File(path).exists()) {
                 Text(
                     "Receipt image not found.",
                     style = MaterialTheme.typography.bodySmall,

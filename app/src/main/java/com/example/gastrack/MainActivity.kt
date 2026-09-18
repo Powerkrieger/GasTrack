@@ -65,6 +65,7 @@ fun GasTrackApp(
     val pagerState = rememberPagerState(pageCount = { 3 })
     var detailEntryId by remember { mutableStateOf<String?>(null) }
     var showSettings by remember { mutableStateOf(false) }
+    // Bumped whenever the entry set changes so Stats/History reload on their next composition.
     var historyRefreshTrigger by remember { mutableStateOf(0) }
 
     when {
@@ -117,10 +118,12 @@ fun GasTrackApp(
                         repository = repository,
                         locationHelper = locationHelper,
                         syncService = syncService,
+                        onSaved = { historyRefreshTrigger++ },
                         modifier = Modifier.fillMaxSize()
                     )
                     1 -> StatsScreen(
                         repository = repository,
+                        refreshTrigger = historyRefreshTrigger,
                         modifier = Modifier.fillMaxSize()
                     )
                     else -> HistoryScreen(

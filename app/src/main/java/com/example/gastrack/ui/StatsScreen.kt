@@ -31,10 +31,10 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 
 @Composable
-fun StatsScreen(repository: FuelRepository, modifier: Modifier = Modifier) {
+fun StatsScreen(repository: FuelRepository, refreshTrigger: Int = 0, modifier: Modifier = Modifier) {
     var entries by remember { mutableStateOf(listOf<FuelEntry>()) }
 
-    LaunchedEffect(Unit) {
+    LaunchedEffect(refreshTrigger) {
         val all = withContext(Dispatchers.IO) { repository.getAllEntries() }
         entries = all.reversed() // chronological order for charts
     }

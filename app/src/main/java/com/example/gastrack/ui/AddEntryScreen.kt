@@ -69,6 +69,7 @@ fun AddEntryScreen(
     locationHelper: LocationHelper,
     syncService: SyncService,
     modifier: Modifier = Modifier,
+    onSaved: () -> Unit = {},
 ) {
     val context = LocalContext.current
     val scope = rememberCoroutineScope()
@@ -113,6 +114,9 @@ fun AddEntryScreen(
         if (success) {
             receiptPath = pendingReceiptFile?.absolutePath
             statusMessage = "Receipt photo saved."
+        } else {
+            pendingReceiptFile?.delete()
+            pendingReceiptFile = null
         }
     }
 
@@ -278,11 +282,13 @@ fun AddEntryScreen(
             statusMessage = "Entry saved!"
             refreshKey++
             isSaving = false
+            onSaved()
 
             // Background sync — update message on success/failure
             val syncResult = syncService.sync()
             if (syncResult is SyncResult.Success && (syncResult.pushed > 0 || syncResult.pulled > 0)) {
                 statusMessage = "Saved & synced (↑${syncResult.pushed} ↓${syncResult.pulled})"
+                if (syncResult.pulled > 0) onSaved()
             } else if (syncResult is SyncResult.Error) {
                 statusMessage = "Saved (sync failed: ${syncResult.message})"
             }

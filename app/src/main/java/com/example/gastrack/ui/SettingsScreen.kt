@@ -179,6 +179,7 @@ fun SettingsScreen(
                 statusMessage = "Syncing..."
                 scope.launch {
                     val result = syncService.sync()
+                    if (result is SyncResult.Success && result.pulled > 0) onImportDone()
                     statusMessage = when (result) {
                         is SyncResult.NotConfigured -> "Configure server URL and key first."
                         is SyncResult.Success -> "Done — ↑${result.pushed} pushed, ↓${result.pulled} pulled."

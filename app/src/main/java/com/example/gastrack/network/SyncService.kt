@@ -15,6 +15,7 @@ import java.net.URL
 
 private const val TAG = "SyncService"
 private const val PREFS = "sync_prefs"
+private val ENTRY_ID_PATTERN = Regex("[A-Za-z0-9-]{1,64}")
 
 sealed class SyncResult {
     object NotConfigured : SyncResult()
@@ -68,15 +69,18 @@ class SyncService(private val context: Context, private val repository: FuelRepo
 
                 for (i in 0 until responseEntries.length()) {
                     val obj = responseEntries.getJSONObject(i)
+                    val id = obj.getString("id")
+                    // The id becomes a file name below — reject anything that isn't UUID-shaped.
+                    if (!ENTRY_ID_PATTERN.matches(id)) continue
                     val photoB64 = obj.optString("photo", "")
                     val receiptPath: String? = if (photoB64.isNotEmpty()) {
-                        val photoFile = File(receiptsDir, "${obj.getString("id")}.jpg")
+                        val photoFile = File(receiptsDir, "$id.jpg")
                         photoFile.writeBytes(Base64.decode(photoB64, Base64.DEFAULT))
                         photoFile.absolutePath
                     } else null
 
                     pulled.add(FuelEntry(
-                        id = obj.getString("id"),
+                        id = id,
                         timestamp = obj.getLong("timestamp"),
                         latitude = obj.getDouble("latitude"),
                         longitude = obj.getDouble("longitude"),

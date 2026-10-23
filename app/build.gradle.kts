@@ -4,7 +4,7 @@ plugins {
 }
 
 android {
-    namespace = "com.example.gastrack"
+    namespace = "de.powerizzle.gastrack"
     compileSdk {
         version = release(36) {
             minorApiLevel = 1
@@ -12,11 +12,11 @@ android {
     }
 
     defaultConfig {
-        applicationId = "com.example.gastrack"
+        applicationId = "de.powerizzle.gastrack"
         minSdk = 24
         targetSdk = 36
-        versionCode = 10
-        versionName = "1.3.3"
+        versionCode = 11
+        versionName = "1.4.0"
 
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
     }

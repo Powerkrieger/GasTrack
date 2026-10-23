@@ -60,3 +60,7 @@ cd GasTrack
 ---
 
 *Built with the assistance of Claude AI.*
+
+## License
+
+MIT, see [LICENSE](LICENSE).

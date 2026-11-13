@@ -33,6 +33,7 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
+import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -74,20 +75,25 @@ fun AddEntryScreen(
     val context = LocalContext.current
     val scope = rememberCoroutineScope()
 
-    var stationName by remember { mutableStateOf("") }
-    var liters by remember { mutableStateOf("") }
-    var euros by remember { mutableStateOf("") }
-    var kilometers by remember { mutableStateOf("") }
-    var latitude by remember { mutableStateOf<Double?>(null) }
-    var longitude by remember { mutableStateOf<Double?>(null) }
-    var city by remember { mutableStateOf("") }
-    var receiptPath by remember { mutableStateOf<String?>(null) }
+    // rememberSaveable so a typed form and a just-taken receipt photo survive configuration
+    // changes (screen rotation recreates the Activity); otherwise the photo's only reference is
+    // lost and the file is orphaned on disk, unrecoverable from the app.
+    var stationName by rememberSaveable { mutableStateOf("") }
+    var liters by rememberSaveable { mutableStateOf("") }
+    var euros by rememberSaveable { mutableStateOf("") }
+    var kilometers by rememberSaveable { mutableStateOf("") }
+    var latitude by rememberSaveable { mutableStateOf<Double?>(null) }
+    var longitude by rememberSaveable { mutableStateOf<Double?>(null) }
+    var city by rememberSaveable { mutableStateOf("") }
+    var receiptPath by rememberSaveable { mutableStateOf<String?>(null) }
     var isFetchingLocation by remember { mutableStateOf(false) }
     var isSaving by remember { mutableStateOf(false) }
     var lastEntry by remember { mutableStateOf<FuelEntry?>(null) }
     var statusMessage by remember { mutableStateOf("") }
     var refreshKey by remember { mutableStateOf(0) }
-    var pendingReceiptFile by remember { mutableStateOf<File?>(null) }
+    // Saveable: the camera may return after a rotation recreated the Activity, and the result
+    // callback needs the path to register the captured photo instead of dropping it.
+    var pendingReceiptPath by rememberSaveable { mutableStateOf<String?>(null) }
     var stationNameAlert by remember { mutableStateOf(false) }
     var litersAlert by remember { mutableStateOf(false) }
     var eurosAlert by remember { mutableStateOf(false) }
@@ -112,11 +118,11 @@ fun AddEntryScreen(
         ActivityResultContracts.TakePicture()
     ) { success ->
         if (success) {
-            receiptPath = pendingReceiptFile?.absolutePath
+            receiptPath = pendingReceiptPath
             statusMessage = "Receipt photo saved."
         } else {
-            pendingReceiptFile?.delete()
-            pendingReceiptFile = null
+            pendingReceiptPath?.let { File(it).delete() }
+            pendingReceiptPath = null
         }
     }
 
@@ -125,7 +131,7 @@ fun AddEntryScreen(
     ) { granted ->
         if (granted) {
             val file = ImageStorage.createReceiptFile(context)
-            pendingReceiptFile = file
+            pendingReceiptPath = file.absolutePath
             val uri = FileProvider.getUriForFile(context, "${context.packageName}.fileprovider", file)
             takePictureLauncher.launch(uri)
         } else {
@@ -201,7 +207,7 @@ fun AddEntryScreen(
         ) == PackageManager.PERMISSION_GRANTED
         if (hasPermission) {
             val file = ImageStorage.createReceiptFile(context)
-            pendingReceiptFile = file
+            pendingReceiptPath = file.absolutePath
             val uri = FileProvider.getUriForFile(context, "${context.packageName}.fileprovider", file)
             takePictureLauncher.launch(uri)
         } else {
@@ -278,7 +284,7 @@ fun AddEntryScreen(
             longitude = null
             city = ""
             receiptPath = null
-            pendingReceiptFile = null
+            pendingReceiptPath = null
             statusMessage = "Entry saved!"
             refreshKey++
             isSaving = false
